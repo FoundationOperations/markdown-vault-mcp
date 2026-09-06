@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import subprocess
+
 import pytest
 
 from tests.fixtures.git import _run_git
@@ -792,3 +794,73 @@ class TestForceMethodsErrorBranches:
         # Hint must not contain the full original (non-truncated) marker if stderr
         # was longer than the cap, but we accept a short stderr too.
         assert len(result.hint) <= 200
+
+
+class TestRebaseIdentityBackport:
+    """Backport of pvliesdonk/markdown-vault-mcp#1363 onto v3.1.0 (#1362)."""
+
+    def test_force_pull_rebases_without_any_repo_or_global_identity(
+        self,
+        git_repo_pair: GitRepoPair,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        from markdown_vault_mcp.git import PULL_REASON_REBASED, GitWriteStrategy
+
+        _seed_remote_commit(
+            git_repo_pair,
+            clone_name="clone_no_identity",
+            file_name="remote_only.md",
+            body="remote\n",
+        )
+        (git_repo_pair.local_path / "local_only.md").write_text("local\n")
+        _run_git(git_repo_pair.local_path, "add", "local_only.md")
+        _run_git(git_repo_pair.local_path, "commit", "-m", "local divergent")
+
+        _run_git(git_repo_pair.local_path, "config", "--unset", "user.name")
+        _run_git(git_repo_pair.local_path, "config", "--unset", "user.email")
+        _run_git(git_repo_pair.local_path, "config", "user.useConfigOnly", "true")
+        bare_home = tmp_path / "bare_home"
+        bare_home.mkdir()
+        monkeypatch.setenv("HOME", str(bare_home))
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(bare_home / "xdg"))
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(bare_home / "no-such-gitconfig"))
+        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+        for var in (
+            "GIT_AUTHOR_NAME",
+            "GIT_AUTHOR_EMAIL",
+            "GIT_COMMITTER_NAME",
+            "GIT_COMMITTER_EMAIL",
+            "EMAIL",
+        ):
+            monkeypatch.delenv(var, raising=False)
+        probe = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(git_repo_pair.local_path),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "probe",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert probe.returncode != 0
+
+        head_before = _run_git(git_repo_pair.local_path, "rev-parse", "HEAD").strip()
+        strategy = GitWriteStrategy(
+            enable_pull=True, enable_push=False, repo_path=git_repo_pair.local_path
+        )
+        result = strategy.force_pull()
+
+        assert result.reason == PULL_REASON_REBASED, result
+        assert result.to_sha != head_before
+        committer = _run_git(
+            git_repo_pair.local_path, "log", "-1", "--format=%cn <%ce>"
+        ).strip()
+        assert (
+            committer
+            == f"{GitWriteStrategy.DEFAULT_COMMIT_NAME} <{GitWriteStrategy.DEFAULT_COMMIT_EMAIL}>"
+        )

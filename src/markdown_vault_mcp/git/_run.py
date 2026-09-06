@@ -93,16 +93,33 @@ def _find_git_root(path: Path) -> Path | None:
         return None
 
 
-def git_env(token: str | None, username: str) -> dict[str, str] | None:
+def git_env(
+    token: str | None,
+    username: str,
+    identity: tuple[str, str] | None = None,
+) -> dict[str, str] | None:
     """Build environment for git subprocess calls.
 
     When a token is set, reuse the existing GIT_ASKPASS mechanism to avoid
     prompting interactively. This mirrors the push path and keeps the token
     out of command-line arguments.
+
+    When ``identity`` (``(name, email)``) is given, the environment also
+    carries it as ``GIT_AUTHOR_*`` / ``GIT_COMMITTER_*`` so that ``git rebase``
+    (which commits) works in a checkout with no ``user.*`` config — the same
+    identity the per-write commit passes with ``-c``.  Backport of
+    pvliesdonk/markdown-vault-mcp#1363 onto v3.1.0.
     """
-    if not token:
+    if not token and identity is None:
         return None
-    return _build_askpass_env(token, username)
+    env = _build_askpass_env(token, username) if token else {**os.environ}
+    if identity is not None:
+        name, email = identity
+        env["GIT_AUTHOR_NAME"] = name
+        env["GIT_AUTHOR_EMAIL"] = email
+        env["GIT_COMMITTER_NAME"] = name
+        env["GIT_COMMITTER_EMAIL"] = email
+    return env
 
 
 def cleanup_git_env(env: dict[str, str] | None) -> None:

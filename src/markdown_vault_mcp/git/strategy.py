@@ -191,7 +191,11 @@ class GitWriteStrategy:
         prompting interactively. This mirrors the push path and keeps the token
         out of command-line arguments.
         """
-        return git_env(self._token, self._username)
+        return git_env(
+            self._token,
+            self._username,
+            identity=(self._commit_name, self._commit_email),
+        )
 
     def _cleanup_git_env(self, env: dict[str, str] | None) -> None:
         cleanup_git_env(env)
