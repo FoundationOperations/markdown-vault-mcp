@@ -161,7 +161,11 @@ def cleanup_git_env(env: dict[str, str] | None) -> None:
 
     Pops the ``MVMCP_GIT_USERNAME`` / ``MVMCP_GIT_TOKEN`` credential vars and
     unlinks the temporary ``GIT_ASKPASS`` script (suppressing ``OSError`` if it
-    is already gone). A ``None`` env (no token was set) is a no-op.
+    is already gone).  A ``None`` env (neither a token nor an identity) is a
+    no-op.  So is an identity-only env: it is a copy of the parent
+    environment, so a ``GIT_ASKPASS`` found in it is the operator's (a VS Code
+    terminal sets one for every child process) and is not this function's to
+    delete — only an env that carries the credential vars wrote its own script.
 
     Args:
         env: The environment dict returned by :func:`git_env`, or ``None``.
@@ -169,7 +173,8 @@ def cleanup_git_env(env: dict[str, str] | None) -> None:
     if env is None:
         return
     env.pop("MVMCP_GIT_USERNAME", None)
-    env.pop("MVMCP_GIT_TOKEN", None)
+    if env.pop("MVMCP_GIT_TOKEN", None) is None:
+        return
     script_path_str = env.pop("GIT_ASKPASS", None)
     if not script_path_str:
         return

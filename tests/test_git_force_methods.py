@@ -767,6 +767,40 @@ class TestForceMethodsErrorBranches:
         finally:
             cleanup_git_env(with_token)
 
+    def test_cleanup_leaves_an_inherited_askpass_alone(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Cleanup unlinks only the askpass script ``git_env`` itself wrote.
+
+        Without a token the env is a copy of the parent environment, so a
+        ``GIT_ASKPASS`` the operator set there (a VS Code terminal sets one for
+        every child) is not this module's to delete.
+        """
+        from pathlib import Path as RuntimePath
+
+        from markdown_vault_mcp.git._run import cleanup_git_env, git_env
+
+        operator_askpass = tmp_path / "operator_askpass.sh"
+        operator_askpass.write_text("#!/bin/sh\n")
+        monkeypatch.setenv("GIT_ASKPASS", str(operator_askpass))
+
+        inherited = git_env(
+            None, "x-access-token", identity=("Door", "door@example.com")
+        )
+        assert inherited is not None
+        assert inherited["GIT_ASKPASS"] == str(operator_askpass)
+        cleanup_git_env(inherited)
+        assert operator_askpass.exists()
+
+        own = git_env("secret", "x-access-token", identity=("Door", "door@example.com"))
+        assert own is not None
+        own_script = RuntimePath(own["GIT_ASKPASS"])
+        assert own_script != operator_askpass
+        assert own_script.exists()
+        cleanup_git_env(own)
+        assert not own_script.exists()
+        assert operator_askpass.exists()
+
     def test_force_push_no_remote_when_upstream_and_origin_head_missing(
         self, tmp_path: Path
     ) -> None:
