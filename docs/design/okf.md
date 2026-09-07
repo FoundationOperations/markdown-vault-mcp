@@ -315,7 +315,9 @@ Everything here changes bytes or write outcomes; all of it is operator-gated
 and none of it is implied by vault declaration.
 
 - **Provenance stamping:** writes through `write`/`edit` set/update
-  `generated: {by, at}`. Actor string: authenticated identity when available
+  `generated: {by, at}`, `at` the UTC instant of the write in the spec's
+  example form (`2026-06-30T14:00:00Z`, a string; #1372). Actor string:
+  authenticated identity when available
   (`human:<subject>` via the existing access-token dependency), else
   `markdown-vault-mcp/<version>` as a tool actor. Existing `generated`
   values are overwritten (it describes the current bytes); `sources` are
@@ -326,7 +328,7 @@ and none of it is implied by vault declaration.
   body also invalidate (the spec ties verification to the concept, not the
   body alone); rename does not. This is the highest-value enforcement:
   it is exactly the invariant an advisory-only setup eventually misses.
-- **`okf_verify` tool:** appends `{by: human:<subject>, at}` to `verified`,
+- **`okf_verify` tool:** appends `{by: human:<subject>, at}` (`at` a UTC instant, #1372) to `verified`,
   promoting the note's tier. `destructiveHint=False`, `idempotentHint=False`.
 
   The authenticated subject is *whose token* is in play, not evidence that a
@@ -361,7 +363,11 @@ and none of it is implied by vault declaration.
   OKF consumers should calibrate to that.
 - **Convention maintenance:** on successful writes, append a `log.md` entry
   (newest-first, `## YYYY-MM-DD` section, `**Update**:`-style bullet) and
-  refresh the affected folder's `index.md` listing. Both are guaranteed
+  refresh the affected folder's `index.md` listing. The section heading is
+  the server's *local* calendar day, as §9 has it and as a reader of the
+  log expects, while the same write's `generated.at` is a UTC instant
+  (#1372); around local midnight the two can name different days, which is
+  the two rules stating what they each mean, not a defect. Both are guaranteed
   versions of what the advisory layer asks the agent to do. Generated
   `index.md` content derives from the same data as `get_toc`.
   **Status:** shipped in phase 5b (see §9). Maintenance runs only for
